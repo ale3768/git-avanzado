@@ -1,0 +1,59 @@
+name: CD - Main
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-version:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Incrementar version
+        if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
+        shell: bash
+        run: |
+          VERSION=$(grep -oE 'AppVersion-[0-9]+' README.md | head -1 | cut -d'-' -f2)
+          NUEVA_VERSION=$((VERSION + 1))
+          FECHA=$(date '+%Y-%m-%d %H:%M:%S')
+
+          sed -i "s/AppVersion-$VERSION/AppVersion-$NUEVA_VERSION/" README.md
+          echo "Ultima actualizacion: $FECHA" >> README.md
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add README.md
+          git commit -m "Actualizar version a AppVersion-$NUEVA_VERSION"
+          git push
+
+  validate-prod:
+    needs: update-version
+    runs-on: self-hosted
+
+    steps:
+      - name: Validar PROD_TOKEN
+        env:
+          TOKEN: ${{ secrets.PROD_TOKEN }}
+        run: |
+          if ($env:TOKEN -eq $env:LOCAL_PROD_TOKEN) {
+            Write-Host "PROD_TOKEN correcto"
+          } else {
+            Write-Host "PROD_TOKEN no coincide"
+            exit 1
+          }
