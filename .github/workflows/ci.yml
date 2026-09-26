@@ -1,0 +1,67 @@
+name: CI - Develop
+
+on:
+  pull_request:
+    branches:
+      - develop
+    types:
+      - opened
+      - synchronize
+      - reopened
+  push:
+    branches:
+      - develop
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-readme:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar rama del Pull Request
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Descargar repositorio
+        if: github.event_name != 'pull_request'
+        uses: actions/checkout@v4
+
+      - name: Añadir feature al README
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          LINEA="Añadida feature: ${{ github.head_ref }}"
+
+          if ! grep -Fxq "$LINEA" README.md; then
+            echo "$LINEA" >> README.md
+
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+            git add README.md
+            git commit -m "Actualizar README con feature"
+            git push origin HEAD:${{ github.head_ref }}
+          else
+            echo "La feature ya estaba añadida al README"
+          fi
+
+  validate-dev:
+    needs: update-readme
+    runs-on: self-hosted
+
+    steps:
+      - name: Validar DEV_TOKEN
+        env:
+          TOKEN: ${{ secrets.DEV_TOKEN }}
+        run: |
+          if ($env:TOKEN -eq $env:LOCAL_DEV_TOKEN) {
+            Write-Host "DEV_TOKEN correcto"
+          } else {
+            Write-Host "DEV_TOKEN no coincide"
+            exit 1
+          }
